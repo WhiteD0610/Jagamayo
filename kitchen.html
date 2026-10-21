@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="キッチン">
+<title>じゃがマヨ キッチン</title>
+<style>
+:root {
+  --bg: #F2F2F7; --surface: #FFFFFF; --surface-2: #F2F2F7;
+  --separator: rgba(60,60,67,0.20); --fill: rgba(120,120,128,0.12);
+  --label: #000000; --label-2: rgba(60,60,67,0.60); --label-3: rgba(60,60,67,0.30);
+  --accent: #007AFF; --red: #FF3B30; --green: #34C759; --orange: #FF9500;
+  --r-md: 10px; --r-lg: 14px; --r-xl: 22px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --ease: cubic-bezier(0.32, 0.72, 0, 1); --dur: 280ms;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E;
+    --separator: rgba(84,84,88,0.65); --fill: rgba(120,120,128,0.24);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,0.60); --label-3: rgba(235,235,245,0.30);
+    --accent: #0A84FF; --red: #FF453A; --green: #30D158; --orange: #FF9F0A;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.5);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+button, .tile, .row, .seg button, .tgrid button, .minus { touch-action: manipulation; }
+body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; color: var(--label);
+  background: var(--bg); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+  touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  padding-bottom: var(--sp-8); }
+.ic { width: 20px; height: 20px; flex: none; display: block; }
+
+.nav { position: sticky; top: 0; z-index: 10; padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+.nav-in { padding: var(--sp-2) var(--sp-4); max-width: 1400px; margin: 0 auto; }
+.nav-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); }
+.nav h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.nav .sub { font-size: 12px; color: var(--label-2); margin-bottom: 0; }
+.tools { display: flex; align-items: center; gap: 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--sp-3);
+  border-radius: 16px; background: var(--fill); font-size: 13px; font-weight: 590; color: var(--label-2); white-space: nowrap; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); }
+.status.ok i { background: var(--green); }
+.status.err i { background: var(--red); }
+.home-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--r-md);
+  background: var(--fill); color: var(--label-2); flex: none; text-decoration: none; }
+.home-btn:active { opacity: 0.4; }
+.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none;
+  color: var(--label-2); cursor: pointer; }
+.icon-btn[aria-pressed="true"] { color: var(--accent); }
+.icon-btn:active { opacity: 0.4; }
+
+/* 調理待ちの品目別合計 */
+.totals { max-width: 1400px; margin: 0 auto; padding: var(--sp-2) var(--sp-4) 0; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tchip { display: flex; align-items: baseline; gap: 6px; background: var(--surface); border-radius: var(--r-md);
+  padding: 5px var(--sp-3); font-size: 14px; }
+.tchip b { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tchip .dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
+.tchip.all { background: var(--fill); }
+.tchip.sp { background: color-mix(in srgb, var(--orange) 16%, var(--surface)); }
+.stitle { font-size: 13px; color: var(--label-2); align-self: center; margin-right: var(--sp-1); }
+.stock { font-size: 11px; color: var(--orange); font-weight: 590; }
+
+/* 注文カード */
+.cards { max-width: 1400px; margin: 0 auto; padding: var(--sp-2) var(--sp-4) 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--sp-2); align-items: start; }
+@media (max-width: 430px) {
+  .cards, .totals, .sec-head, .warn-bar, .nav-in { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+  .card { padding: var(--sp-2) var(--sp-3); }
+  .no { font-size: 28px; }
+}
+.card { background: var(--surface); border-radius: var(--r-lg); padding: var(--sp-3); display: flex; flex-direction: column; gap: 6px; }
+.card.oldest { box-shadow: inset 0 0 0 2px var(--accent); }
+.card.ready { background: color-mix(in srgb, var(--green) 14%, var(--surface)); }
+.rtag { font-size: 12px; font-weight: 700; color: var(--green); }
+.btn-green { background: var(--green); color: #fff; }
+.btn-gray { background: var(--fill); color: var(--label); }
+.btn.sm { min-height: 44px; font-size: 15px; }
+.sec-head { max-width: 1400px; margin: 0 auto; padding: var(--sp-3) var(--sp-4) 0; font-size: 12px; color: var(--label-2); }
+.card.new { animation: pop var(--dur) var(--ease); }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.cmeta { display: flex; justify-content: space-between; gap: var(--sp-2); font-size: 12px; color: var(--label-2);
+  font-variant-numeric: tabular-nums; }
+.cmeta .warn { color: var(--orange); font-weight: 590; }
+.cmeta .late { color: var(--red); font-weight: 590; }
+.no { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.no small { font-size: 11px; font-weight: 590; color: var(--label-2); letter-spacing: 0; margin-left: 4px; }
+.age { font-size: 12px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.age.warn { color: var(--orange); font-weight: 590; }
+.age.late { color: var(--red); font-weight: 590; }
+.items { display: grid; gap: 2px; padding: 6px 0; border-top: 0.5px solid var(--separator); }
+.item { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 590; min-height: 34px; }
+.item .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.item .nm { flex: 1; min-width: 0; }
+.item { align-items: center; }
+.item .qt { font-size: 13px; font-weight: 590; color: var(--label-2); font-variant-numeric: tabular-nums;
+  text-align: right; white-space: nowrap; }
+.item .qt b { font-size: 26px; font-weight: 700; color: var(--label); letter-spacing: -0.02em; margin-right: 1px; }
+.item .nm { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+
+.tchip .pcs { font-size: 13px; color: var(--label-2); }
+.tchip b.big { font-size: 22px; }
+
+
+.warn-bar { max-width: 1400px; margin: var(--sp-2) auto 0; padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-lg); background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red);
+  font-size: 18px; font-weight: 700; letter-spacing: -0.01em; text-align: center; }
+.empty { margin: 64px var(--sp-6); text-align: center; color: var(--label-2); font-size: 17px; }
+.empty .ic { width: 44px; height: 44px; margin: 0 auto var(--sp-3); color: var(--label-3); }
+
+.btn { min-height: 44px; padding: 0 var(--sp-4); border: 0; border-radius: var(--r-md); font: inherit; font-weight: 590;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+.btn:active { transform: scale(0.96); opacity: 0.85; }
+.btn-filled { background: var(--accent); color: #fff; }
+.btn.block { width: 100%; }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="appView">
+  <header class="nav">
+    <div class="nav-in">
+      <div class="nav-top">
+        <div style="display:flex;align-items:center;gap:var(--sp-2);min-width:0">
+        <a class="home-btn" href="index.html" aria-label="メニュー"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10.5V19h11v-8.5"/></svg></a>
+        <div>
+          <div class="sub" id="sub">更新中</div>
+          <h1 id="head">オーダー 0件</h1>
+        </div>
+        </div>
+        <div class="tools">
+          <div class="status" id="status"><i></i><span>確認中</span></div>
+          <button class="icon-btn" id="soundBtn" aria-pressed="false" aria-label="新着音">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10a5 5 0 0 1 10 0v5l1.5 2.5h-13L7 15z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="warn-bar" id="warnBar" hidden></div>
+  <div class="totals" id="totals"></div>
+  <div class="totals" id="surplus"></div>
+  <div class="cards" id="cards"></div>
+  <div class="sec-head" id="readyHead" hidden>準備完了（お渡し待ち）</div>
+  <div class="cards" id="readyCards"></div>
+  <div class="empty" id="empty" hidden>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,13 9,18 20,6"/></svg>
+    オーダーはありません
+  </div>
+</div>
+
+<script>
+// ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
+const GAS_URL = '';
+// ================================================================
+
+const K = { sound: 'jaga_kitchen_sound', queue: 'jaga_kitchen_queue' };
+const $ = s => document.querySelector(s);
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+
+let sound = localStorage.getItem(K.sound) === '1';
+let cfg = null, orders = [], seen = new Set(), surplus = {}, stock = null;
+let queue = load(K.queue, []);          // 未送信の調理完了イベント
+let local = {};                         // 送信待ちの状態（id -> status）
+let connOk = null, lastOk = 0, first = true;
+
+const colorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.color : '#8E8E93'; };
+const pcsOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.pcs) || 0 : 0; };
+const flavorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? (p.flavor || p.name) : ''; };
+const nameOf = (pid, fallback) => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.name : fallback; };
+const statusOf = o => local[o.id] || o.status;
+
+// ---------- 操作 ----------
+function mark(id, ready) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  let use = null;
+  if (ready) {                                     // 充当した余剰在庫を消費する
+    const { alloc } = allocate(orders.filter(x => statusOf(x) === 'waiting'));
+    const a = alloc[id] || {};
+    const byFlavor = {};
+    Object.keys(a).forEach(pid => { const f = flavorOf(pid); byFlavor[f] = (byFlavor[f] || 0) + a[pid]; });
+    use = Object.keys(byFlavor).map(f => ({ flavor: f, pieces: byFlavor[f] }));
+    Object.keys(byFlavor).forEach(f => { surplus[f] = Math.max(0, (surplus[f] || 0) - byFlavor[f]); });
+  }
+  local[id] = ready ? 'ready' : 'waiting';
+  queue = queue.filter(e => e.id !== id);
+  queue.push({ eid: uid(), type: ready ? 'ready' : 'unready', id, ts: Date.now(), use });
+  store(K.queue, queue);
+  render();
+  flush();
+}
+
+let syncing = false;
+async function flush() {
+  if (!GAS_URL || syncing || !queue.length) return;
+  syncing = true;
+  const batch = queue.slice(0, 50);
+  try {
+    const r = await fetch(GAS_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'sync', events: batch })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'error');
+    const sent = new Set(batch.map(e => e.eid));
+    queue = queue.filter(e => !sent.has(e.eid));
+    store(K.queue, queue);
+    if (j.stock) stock = j.stock;
+    connOk = true;
+    fetchOrders(false);
+  } catch (e) {
+    connOk = false; renderStatus();
+  } finally {
+    syncing = false;
+    if (queue.length) setTimeout(flush, 3000);
+  }
+}
+
+// ---------- 取得 ----------
+async function fetchOrders(initial) {
+  if (!GAS_URL) return;
+  try {
+    const r = await fetch(GAS_URL + '?action=orders&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    cfg = j.config;
+    surplus = j.surplus || {};
+    if (j.stock) stock = j.stock;
+    const next = j.orders.map(o => ({
+      id: o[0], ticket: o[1], ts: o[2],
+      items: JSON.parse(o[3] || '[]').map(it => ({ productId: it[0], name: it[1], price: it[2], qty: it[3] })),
+      status: o[4]
+    })).sort((a, b) => a.ts - b.ts);
+    const fresh = next.filter(o => !seen.has(o.id));
+    orders = next;
+    orders.forEach(o => { seen.add(o.id); if (local[o.id] === o.status) delete local[o.id]; });
+    Object.keys(local).forEach(id => { if (!orders.some(o => o.id === id)) delete local[id]; });
+    connOk = true; lastOk = Date.now();
+    render(fresh.map(o => o.id));
+    if (!first && fresh.length && sound) beep(fresh.length);
+    else if (!first && fresh.length && navigator.vibrate) navigator.vibrate([300, 120, 300]);
+    first = false;
+  } catch (e) {
+    connOk = false; renderStatus();
+  }
+}
+
+/** 余剰在庫（品目ごとの個数）を整理券番号の小さい注文から順に充当する。
+ *  alloc[orderId][productId] = 充当した在庫数 */
+function allocate(cooking) {
+  const rem = Object.assign({}, surplus);
+  const alloc = {};
+  cooking.slice().sort((a, b) => a.ticket - b.ticket || a.ts - b.ts).forEach(o => {
+    o.items.forEach(it => {
+      const f = flavorOf(it.productId);
+      const need = pcsOf(it.productId) * it.qty;
+      const n = Math.min(rem[f] || 0, need);
+      if (n > 0) { (alloc[o.id] = alloc[o.id] || {})[it.productId] = n; rem[f] -= n; }
+    });
+  });
+  return { alloc, rem };
+}
+
+// ---------- 表示 ----------
+function render(freshIds) {
+  freshIds = freshIds || [];
+  const cooking = orders.filter(o => statusOf(o) === 'waiting');
+  const ready = orders.filter(o => statusOf(o) === 'ready');
+  const { alloc, rem } = allocate(cooking);
+  $('#head').textContent = '調理待ち ' + cooking.length + '件';
+  const wb = $('#warnBar');
+  if (stock && stock.warn) {
+    wb.hidden = false;
+    wb.textContent = stock.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + '個').join(' / ') + '（在庫わずか）';
+  } else wb.hidden = true;
+  renderStatus();
+
+  const byP = {};                       // productId -> 注文個数（調理待ち）
+  cooking.forEach(o => o.items.forEach(i => { byP[i.productId] = (byP[i.productId] || 0) + i.qty; }));
+  const ids = (cfg && cfg.products || []).map(p => p.id).filter(id => byP[id])
+    .concat(Object.keys(byP).filter(id => !(cfg && cfg.products || []).some(p => p.id === id)));
+  $('#totals').innerHTML = ids.length
+    ? '<span class="stitle">調理待ち</span>' +
+      ids.map(id => `<div class="tchip"><span class="dot" style="background:${esc(colorOf(id))}"></span>
+        <span>${esc(nameOf(id, '不明'))}</span><b class="big">${byP[id]}</b><span>個</span></div>`).join('')
+    : '';
+  const left = Object.keys(rem).filter(f => rem[f] > 0);
+  $('#surplus').innerHTML = left.length
+    ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(f =>
+        `<div class="tchip sp"><span>${esc(f)}</span><b>${rem[f]}</b><span>個</span></div>`).join('')
+    : '';
+
+  $('#empty').hidden = !!orders.length;
+  $('#cards').innerHTML = cooking.map((o, idx) => card(o, idx === 0, freshIds.includes(o.id), false, alloc[o.id] || {})).join('');
+  $('#readyHead').hidden = !ready.length;
+  $('#readyCards').innerHTML = ready.map(o => card(o, false, false, true, {})).join('');
+  tickAges();
+}
+
+function card(o, oldest, fresh, ready, alloc) {
+  alloc = alloc || {};
+  return `<div class="card ${ready ? 'ready' : ''} ${oldest ? 'oldest' : ''} ${fresh ? 'new' : ''}">
+    <div class="chead">
+      <div class="no">${o.ticket}<small>整理券</small></div>
+    </div>
+    <div class="cmeta"><span>${hm(o.ts)} 受付</span>${ready ? '<span class="rtag">準備完了</span>' : '<span data-ts="' + o.ts + '" class="age"></span>'}</div>
+    <div class="items">${o.items.map(i => {
+      const pcs = pcsOf(i.productId);
+      const a = pcs ? Math.min(i.qty, Math.floor((alloc[i.productId] || 0) / pcs)) : 0;   // 余剰在庫から出せる個数
+      return `<div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
+        <span class="nm" style="flex:1;min-width:0">${esc(nameOf(i.productId, i.name))}${a ? `<span class="stock">うち在庫${a}個</span>` : ''}</span>
+        <span class="qt">×<b>${i.qty}</b></span></div>`;
+    }).join('')}</div>
+    ${ready
+      ? `<button class="btn btn-gray sm block" data-unready="${esc(o.id)}">調理中に戻す</button>`
+      : `<button class="btn btn-green block" data-ready="${esc(o.id)}">調理完了</button>`}
+  </div>`;
+}
+
+function tickAges() {
+  document.querySelectorAll('.age').forEach(el => {
+    const m = Math.floor((Date.now() - Number(el.dataset.ts)) / 60000);
+    el.textContent = m < 1 ? 'たった今' : m + '分経過';
+    el.className = 'age' + (m >= 10 ? ' late' : m >= 5 ? ' warn' : '');
+  });
+}
+
+function renderStatus() {
+  const el = $('#status'), t = el.querySelector('span');
+  el.className = 'status ' + (connOk === true ? 'ok' : connOk === false ? 'err' : '');
+  t.textContent = connOk === false ? '接続エラー' : queue.length ? '送信中 ' + queue.length : '自動更新中';
+  $('#sub').textContent = lastOk ? '最終更新 ' + hm(lastOk) + ':' + pad(new Date(lastOk).getSeconds()) : '更新中';
+}
+
+let ac = null;
+function tone(freq, at, dur, gain) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, ac.currentTime + at);
+  g.gain.exponentialRampToValueAtTime(gain, ac.currentTime + at + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + at + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(ac.currentTime + at); o.stop(ac.currentTime + at + dur + 0.02);
+}
+/** 新規オーダー：大きめの3連ブザー＋長めの振動 */
+function beep(n) {
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 450]);
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    [0, 0.34, 0.68].forEach(t => { tone(988, t, 0.24, 0.85); tone(1319, t, 0.24, 0.5); });
+  } catch (e) {}
+  if (n) flashTitle(n);
+}
+let flashTimer = null;
+function flashTitle(n) {
+  clearTimeout(flashTimer);
+  const h = $('#head');
+  h.textContent = '新しいオーダー ' + n + '件';
+  h.style.color = 'var(--accent)';
+  flashTimer = setTimeout(() => { h.style.color = ''; render(); }, 4000);
+}
+
+// ---------- イベント ----------
+document.addEventListener('click', e => {
+  const r = e.target.closest('[data-ready]'); if (r) { mark(r.dataset.ready, true); return; }
+  const u = e.target.closest('[data-unready]'); if (u) { mark(u.dataset.unready, false); return; }
+});
+$('#soundBtn').addEventListener('click', () => {
+  sound = !sound; localStorage.setItem(K.sound, sound ? '1' : '0');
+  $('#soundBtn').setAttribute('aria-pressed', sound);
+  if (sound) beep(0);  // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
+});
+document.addEventListener('dblclick', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchOrders(false); flush(); } });
+
+$('#soundBtn').setAttribute('aria-pressed', sound);
+fetchOrders(true); flush();
+setInterval(() => { if (!document.hidden) fetchOrders(false); }, 3000);
+setInterval(tickAges, 10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="販売カウンター">
+<title>じゃがマヨ販売カウンター</title>
+<style>
+:root {
+  --bg: #F2F2F7; --surface: #FFFFFF; --surface-2: #F2F2F7;
+  --separator: rgba(60,60,67,0.20); --fill: rgba(120,120,128,0.12);
+  --label: #000000; --label-2: rgba(60,60,67,0.60); --label-3: rgba(60,60,67,0.30);
+  --accent: #007AFF; --red: #FF3B30; --green: #34C759; --orange: #FF9500;
+  --r-sm: 8px; --r-md: 10px; --r-lg: 14px; --r-xl: 22px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --ease: cubic-bezier(0.32, 0.72, 0, 1); --dur: 280ms;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E;
+    --separator: rgba(84,84,88,0.65); --fill: rgba(120,120,128,0.24);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,0.60); --label-3: rgba(235,235,245,0.30);
+    --accent: #0A84FF; --red: #FF453A; --green: #30D158; --orange: #FF9F0A;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.5);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+button, .tile, .row, .seg button, .tgrid button, .minus { touch-action: manipulation; }
+html, body { overscroll-behavior: none; }
+body {
+  margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47;
+  color: var(--label); background: var(--bg); -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+.ic { width: 20px; height: 20px; flex: none; display: block; }
+
+/* ナビ */
+.nav { position: sticky; top: 0; z-index: 10; padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+.nav-in { padding: var(--sp-3) var(--sp-4); }
+.nav-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-2); }
+.edit-hint { font-size: 12px; font-weight: 590; color: var(--accent); white-space: nowrap; }
+.nav h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+  display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.nav .date { font-size: 13px; color: var(--label-2); margin-bottom: 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--sp-3);
+  border-radius: 16px; background: var(--fill); font-size: 13px; font-weight: 590; color: var(--label-2); white-space: nowrap; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); }
+.status.ok i { background: var(--green); }
+.status.warn i { background: var(--orange); }
+.status.err i { background: var(--red); }
+.home-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--r-md);
+  background: var(--fill); color: var(--label-2); flex: none; margin-left: -4px; text-decoration: none; }
+.home-btn:active { opacity: 0.4; }
+.bell-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none;
+  color: var(--label-3); cursor: pointer; margin-right: -8px; }
+.bell-btn[aria-pressed="true"] { color: var(--accent); }
+.bell-btn:active { opacity: 0.4; }
+.seg { display: flex; padding: 2px; background: var(--fill); border-radius: 9px; margin-top: var(--sp-3); }
+.seg button { position: relative; flex: 1; min-height: 34px; border: 0; border-radius: 7px; background: none; font: inherit;
+  font-size: 13px; font-weight: 590; color: var(--label); cursor: pointer; transition: background var(--dur) var(--ease); }
+.seg button[aria-selected="true"] { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.badge { position: absolute; top: -7px; right: -4px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: var(--red); color: #fff; font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums; display: grid; place-items: center; line-height: 1; }
+
+/* 商品タイル */
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) 0; }
+@media (min-width: 640px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+.tile { position: relative; min-height: 132px; border-radius: var(--r-lg); background: var(--surface);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3) 20px; display: flex; flex-direction: column;
+  justify-content: space-between; cursor: pointer; overflow: hidden;
+  transition: transform 200ms var(--ease), background 200ms var(--ease); }
+.tile:active { transform: scale(0.96); }
+.tile.flash { background: color-mix(in srgb, var(--tc) 18%, var(--surface)); }
+.tile .bar { position: absolute; left: 0; top: var(--sp-4); bottom: var(--sp-4); width: 4px;
+  border-radius: 0 2px 2px 0; background: var(--tc); }
+.tile-name { font-size: 17px; font-weight: 590; padding-right: 36px; line-height: 1.3; }
+.tile-price { font-size: 15px; color: var(--label-2); }
+.tile-count { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  align-self: flex-end; font-variant-numeric: tabular-nums; color: var(--label-3); }
+.tile-count.on { color: var(--label); }
+.tile-count small { font-size: 15px; font-weight: 590; color: var(--label-2); margin-left: 2px; }
+.minus { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; background: none;
+  display: grid; place-items: center; cursor: pointer; color: var(--label-2); }
+.minus span { width: 28px; height: 28px; border-radius: 50%; background: var(--fill); display: grid; place-items: center;
+  transition: opacity var(--dur) var(--ease); }
+.minus:active span { opacity: 0.4; }
+.minus .ic { width: 16px; height: 16px; }
+.minus:disabled { visibility: hidden; }
+
+.warn-bar { margin: var(--sp-3) var(--sp-4) 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red);
+  font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-align: center; }
+.empty { margin: 56px var(--sp-6); text-align: center; color: var(--label-2); font-size: 15px; }
+.empty .ic { width: 40px; height: 40px; margin: 0 auto var(--sp-3); color: var(--label-3); }
+
+/* お渡し待ち */
+.waitlist { padding: var(--sp-3) var(--sp-4) 0; display: grid; gap: var(--sp-3); }
+.wcard { background: var(--surface); border-radius: var(--r-lg); padding: var(--sp-4); display: flex; align-items: center; gap: var(--sp-4); }
+.wcard.next { box-shadow: inset 0 0 0 2px var(--accent); }
+.wcard.ready { background: color-mix(in srgb, var(--green) 16%, var(--surface)); box-shadow: inset 0 0 0 2px var(--green); }
+.wready { font-size: 22px; font-weight: 700; color: var(--green); letter-spacing: -0.01em; line-height: 1.2; }
+.wcooking { font-size: 15px; font-weight: 590; color: var(--orange); }
+.wno { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums;
+  width: 64px; flex: none; }
+.wno small { display: block; font-size: 11px; font-weight: 590; color: var(--label-2); letter-spacing: 0; }
+.witems { flex: 1; min-width: 0; font-size: 15px; }
+.witems .sub { font-size: 13px; color: var(--label-2); }
+.wact { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex: none; }
+
+/* 下部バー */
+.bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: var(--sp-2);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: inset 0 0.5px 0 var(--separator); }
+.sum { flex: 1; min-width: 0; }
+.sum .cap { font-size: 13px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sum .cap span { font-weight: 590; color: var(--label); }
+.sum .val { font-variant-numeric: tabular-nums; }
+.sum .val { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.btn { min-height: 48px; padding: 0 var(--sp-4); border: 0; border-radius: var(--r-md); font: inherit; font-weight: 590;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+.btn:active { transform: scale(0.96); opacity: 0.85; }
+.btn-filled { background: var(--accent); color: #fff; }
+.btn-tinted { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.btn-green { background: var(--green); color: #fff; }
+.btn-gray { background: var(--fill); color: var(--label); }
+.btn-plain { background: none; color: var(--accent); padding: 0 var(--sp-2); min-height: 40px; }
+.btn-plain.red { color: var(--red); }
+.btn-danger { background: var(--red); color: #fff; }
+.btn:disabled { opacity: 0.35; pointer-events: none; }
+.btn.block { width: 100%; }
+.btn.sm { min-height: 40px; font-size: 15px; padding: 0 var(--sp-3); }
+
+/* トースト */
+.toast { position: fixed; left: var(--sp-4); right: var(--sp-4); z-index: 30;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  min-height: 52px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow);
+  font-size: 15px; opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.toast.show { opacity: 1; transform: none; pointer-events: auto; }
+.toast .msg { flex: 1; }
+
+/* シート */
+.scrim { position: fixed; inset: 0; z-index: 49; background: rgba(0,0,0,0.4); opacity: 0; pointer-events: none;
+  transition: opacity var(--dur) var(--ease); }
+.scrim.open { opacity: 1; pointer-events: auto; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 82vh; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: var(--shadow);
+  padding: var(--sp-3) 0 env(safe-area-inset-bottom); transform: translateY(100%); visibility: hidden;
+  transition: transform var(--dur) var(--ease), visibility 0s linear var(--dur); }
+.sheet.open { transform: none; visibility: visible; transition: transform var(--dur) var(--ease); }
+.sheet::before { content: ""; display: block; width: 36px; height: 5px; margin: 0 auto var(--sp-2);
+  border-radius: 3px; background: var(--label-3); flex: none; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--sp-2) var(--sp-2) var(--sp-4); flex: none; }
+.sheet-head h2 { margin: 0; font-size: 22px; font-weight: 700; }
+.sheet-body { overflow-y: auto; padding: 0 var(--sp-4) var(--sp-6); -webkit-overflow-scrolling: touch; }
+.list { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
+.row { display: flex; align-items: center; gap: var(--sp-3); min-height: 52px; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); }
+.row + .row { box-shadow: inset 0 0.5px 0 var(--separator); }
+.row .t { font-size: 15px; color: var(--label-2); font-variant-numeric: tabular-nums; width: 62px; flex: none; }
+.row .no { font-size: 17px; font-weight: 700; width: 40px; flex: none; font-variant-numeric: tabular-nums; }
+.row .n { flex: 1; min-width: 0; font-size: 15px; }
+.row .st { font-size: 13px; color: var(--label-2); }
+.row.void .no, .row.void .n, .row.void .t { text-decoration: line-through; color: var(--label-3); }
+.hold { position: relative; overflow: hidden; min-height: 34px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); font: inherit; font-size: 13px;
+  font-weight: 590; cursor: pointer; touch-action: none; user-select: none; display: inline-flex; align-items: center; justify-content: center; }
+.hold .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--red); opacity: 0.35; }
+.hold .lbl { position: relative; }
+.hold.holding { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
+.field { width: 100%; min-height: 48px; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md);
+  background: var(--surface); font: inherit; color: var(--label); -webkit-user-select: text; user-select: text; }
+.field:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-3) 0; }
+.chips button { min-height: 40px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: var(--fill);
+  font: inherit; font-size: 15px; color: var(--label); cursor: pointer; }
+.row.pick { width: 100%; border: 0; background: none; font: inherit; color: var(--label); text-align: left;
+  cursor: pointer; min-height: 60px; justify-content: space-between; }
+.row.pick:active { background: var(--fill); }
+.row .sub2 { font-size: 13px; color: var(--label-2); }
+.cap-line { font-size: 13px; color: var(--label-2); margin: var(--sp-3) var(--sp-3) 0; }
+.tgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-2); }
+.tgrid button { min-height: 52px; border: 0; border-radius: var(--r-md); background: var(--surface); font: inherit;
+  font-size: 17px; font-weight: 590; font-variant-numeric: tabular-nums; color: var(--label); cursor: pointer; }
+.tgrid button[aria-selected="true"] { background: var(--accent); color: #fff; }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="appView">
+  <header class="nav">
+    <div class="nav-in">
+      <div class="nav-top">
+        <div style="display:flex;align-items:center;gap:var(--sp-2);min-width:0">
+        <a class="home-btn" href="index.html" aria-label="メニュー"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10.5V19h11v-8.5"/></svg></a>
+        <div>
+          <div class="date" id="date"></div>
+          <h1 id="head">整理券 No.1</h1>
+        </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:2px">
+          <div class="status" id="status"><i></i><span>確認中</span></div>
+          <button class="bell-btn" id="soundBtn" aria-pressed="false" aria-label="準備完了の通知音">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10a5 5 0 0 1 10 0v5l1.5 2.5h-13L7 15z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="seg" id="paneSeg">
+        <button data-pane="sale" aria-selected="true">注文入力</button>
+        <button data-pane="wait" aria-selected="false">お渡し待ち</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="warn-bar" id="warnBar" hidden></div>
+
+  <main>
+    <section id="paneSale">
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden></div>
+    </section>
+    <section id="paneWait" hidden>
+      <div class="waitlist" id="waitlist"></div>
+      <div class="empty" id="waitEmpty" hidden>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,13 9,18 20,6"/></svg>
+        お渡し待ちはありません
+      </div>
+      <div style="padding:var(--sp-6) var(--sp-4) 0"><button class="btn btn-tinted block" id="histBtn">本日の注文履歴</button></div>
+    </section>
+  </main>
+
+  <div class="bottom" id="bottomSale">
+    <div class="sum">
+      <div class="cap">この注文 <span id="cartQty">0個</span></div>
+      <div class="val" id="cartAmt">¥0</div>
+    </div>
+    <button class="btn btn-gray" id="undoBtn" disabled>取り消し</button>
+    <button class="btn btn-filled" id="sendBtn" disabled>送信</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="msg" id="toastMsg"></span><button class="btn btn-plain" id="toastAct"></button></div>
+
+<div class="scrim" id="scrim"></div>
+<section class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-head"><h2 id="sheetTitle"></h2><button class="btn btn-plain" id="closeSheet">完了</button></div>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+
+<script>
+// ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
+const GAS_URL = '';
+// ================================================================
+
+const K = { cfg: 'jaga_cfg_v2', orders: 'jaga_orders_v2', queue: 'jaga_queue_v2',
+            ticket: 'jaga_ticket_v2', sound: 'jaga_reg_sound' };
+const $ = s => document.querySelector(s);
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const yen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
+const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const hms = ts => hm(ts) + ':' + pad(new Date(ts).getSeconds());
+
+let cfg = load(K.cfg, null);
+let orders = load(K.orders, []);   // {id, ticket, ts, items:[{productId,name,price,qty}], status, doneAt}
+let queue = load(K.queue, []);
+let ticket = load(K.ticket, 1);
+let cart = {}, cartLog = [];
+let pane = 'sale';
+let online = null;
+let sound = localStorage.getItem(K.sound) === '1';
+
+const ticketMax = () => (cfg && cfg.ticketMax) || 30;
+const wrap = n => (n - 1) % ticketMax() + 1;
+const waiting = () => orders.filter(o => o.status === 'waiting' || o.status === 'ready').sort((a, b) => a.ts - b.ts);
+const cartQty = () => Object.values(cart).reduce((a, n) => a + n, 0);
+const priceOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.price) || 0 : 0; };
+const cartAmt = () => Object.keys(cart).reduce((a, pid) => a + priceOf(pid) * cart[pid], 0);
+const pcsOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.pcs) || 0 : 0; };
+const flavorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? (p.flavor || p.name) : ''; };
+function surplusOf(o) {                                // 品目ごとの個数にまとめる
+  const m = {};
+  o.items.forEach(i => { const f = flavorOf(i.productId); if (f) m[f] = (m[f] || 0) + pcsOf(i.productId) * i.qty; });
+  return Object.keys(m).map(f => ({ flavor: f, pieces: m[f] }));
+}
+const warnText = st => st.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + '個').join(' / ') + '（在庫わずか）';
+const itemsText = o => o.items.map(i => i.name + '×' + i.qty).join(' / ');
+
+// ---------- 注文操作 ----------
+function enqueue(ev) { ev.eid = uid(); queue.push(ev); store(K.queue, queue); scheduleFlush(); }
+
+function add(p) {
+  cart[p.id] = (cart[p.id] || 0) + 1; cartLog.push(p.id);
+  if (navigator.vibrate) navigator.vibrate(10);
+  render(); flash(p.id);
+}
+function sub(pid) {
+  if (!cart[pid]) return;
+  cart[pid]--; if (!cart[pid]) delete cart[pid];
+  const i = cartLog.lastIndexOf(pid); if (i >= 0) cartLog.splice(i, 1);
+  render();
+}
+function undo() {
+  const pid = cartLog[cartLog.length - 1];
+  if (!pid) { toast('取り消す入力がありません'); return; }
+  sub(pid);
+}
+function send() {
+  const qty = cartQty();
+  if (!qty) return;
+  const items = Object.keys(cart).map(pid => {
+    const p = (cfg.products || []).find(x => x.id === pid) || { name: '不明', price: 0 };
+    return { productId: pid, name: p.name, price: Number(p.price) || 0, qty: cart[pid] };
+  });
+  const amount = items.reduce((a, i) => a + i.price * i.qty, 0);
+  const o = { id: uid(), ticket, ts: Date.now(), items, status: 'waiting' };
+  orders.push(o); store(K.orders, orders);
+  enqueue({ type: 'order', id: o.id, ticket: o.ticket, ts: o.ts, items });
+  const no = ticket;
+  ticket = ticket % ticketMax() + 1; store(K.ticket, ticket);
+  cart = {}; cartLog = [];
+  if (navigator.vibrate) navigator.vibrate([16, 40, 16]);
+  render();
+  toast('No.' + no + ' を送信（' + qty + '個 ' + yen(amount) + '）', '取り消す', () => voidOrder(o.id));
+}
+function done(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o || o.status !== 'ready') return;
+  o.status = 'done'; o.doneAt = Date.now(); store(K.orders, orders);
+  enqueue({ type: 'done', id, ts: o.doneAt });
+  render();
+  toast('No.' + o.ticket + ' お渡し完了', '戻す', () => reopen(id));
+}
+function reopen(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o || o.status === 'void') return;
+  o.status = 'ready'; delete o.doneAt; store(K.orders, orders);
+  enqueue({ type: 'reopen', id });
+  render();
+}
+function voidOrder(id, reason, disposition) {
+  const o = orders.find(x => x.id === id);
+  if (!o || o.status === 'void') return;
+  const disp = disposition || (o.status === 'ready' ? 'stock' : 'none');
+  o.status = 'void'; store(K.orders, orders);
+  enqueue({
+    type: 'void', id, reason: reason || '', disposition: disp,
+    surplus: disp === 'stock' ? surplusOf(o) : null
+  });
+  render();
+  toast('No.' + o.ticket + ' を取消（' + (disp === 'stock' ? '余剰在庫へ' : disp === 'waste' ? '廃棄' : '材料は未使用') + '）');
+}
+
+// 長押し（3秒）で取消
+let hold = null;
+function holdStart(el, id) {
+  const fill = el.querySelector('.fill');
+  fill.style.transition = '';
+  el.classList.add('holding');
+  const t0 = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - t0) / 3000);
+    fill.style.width = (p * 100) + '%';
+    if (navigator.vibrate && p < 1 && Math.floor(p * 3) !== Math.floor(((now - 16 - t0) / 3000) * 3)) navigator.vibrate(8);
+    if (p >= 1) { holdCancel(); if (navigator.vibrate) navigator.vibrate([60, 40, 60]); askVoid(id); return; }
+    hold.raf = requestAnimationFrame(step);
+  };
+  hold = { el, id, raf: requestAnimationFrame(step) };
+}
+function holdCancel() {
+  if (!hold) return;
+  cancelAnimationFrame(hold.raf);
+  const el = hold.el, fill = el.querySelector('.fill');
+  el.classList.remove('holding');
+  fill.style.transition = 'width 160ms linear';
+  fill.style.width = '0%';
+  hold = null;
+  render();
+}
+function askVoid(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  openSheet(true, 'reason', id);
+}
+function setTicket(n) {
+  ticket = n; store(K.ticket, ticket);
+  enqueue({ type: 'setSeq', id: 'seq', value: n });    // 他の端末にも反映
+  render(); openSheet(false);
+  toast('次の整理券を No.' + n + ' にしました');
+}
+
+// ---------- 表示 ----------
+function render() {
+  const d = new Date();
+  $('#date').textContent = (d.getMonth() + 1) + '月' + d.getDate() + '日（' + '日月火水木金土'[d.getDay()] + '）';
+  const w = waiting();
+  $('#head').innerHTML = pane === 'sale'
+    ? '整理券 No.' + ticket + '<span class="edit-hint">変更</span>'
+    : 'お渡し待ち ' + w.length + '件';
+  const segs = document.querySelectorAll('#paneSeg button');
+  segs.forEach(b => b.setAttribute('aria-selected', b.dataset.pane === pane));
+  const readyCount = w.filter(o => o.status === 'ready').length;
+  segs[1].innerHTML = 'お渡し待ち' + (w.length ? '（' + w.length + '）' : '')
+    + (readyCount ? '<span class="badge">' + readyCount + '</span>' : '');
+  $('#paneSale').hidden = pane !== 'sale';
+  $('#paneWait').hidden = pane !== 'wait';
+  $('#bottomSale').hidden = pane !== 'sale';
+  document.body.style.paddingBottom = pane === 'sale' ? 'calc(96px + env(safe-area-inset-bottom))' : '32px';
+
+  const wb = $('#warnBar');
+  if (stock && stock.warn) {
+    wb.hidden = false;
+    wb.textContent = warnText(stock);
+  } else wb.hidden = true;
+
+  const products = (cfg && cfg.products || []).filter(p => p.active !== false);
+  const grid = $('#grid'), empty = $('#empty');
+  if (!products.length) {
+    grid.innerHTML = ''; empty.hidden = false;
+    empty.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none"/></svg>'
+      + (GAS_URL ? '商品を読み込み中です。表示されない場合は管理者アプリで商品を登録してください。' : 'register.html 内の GAS_URL を設定してください。');
+  } else {
+    empty.hidden = true;
+    grid.innerHTML = products.map(p => {
+      const c = cart[p.id] || 0;
+      return `<div class="tile" role="button" tabindex="0" data-id="${esc(p.id)}" style="--tc:${esc(p.color || '#FF9500')}">
+        <div class="bar"></div>
+        <div><div class="tile-name">${esc(p.name)}</div><div class="tile-price">${yen(p.price)}</div></div>
+        <div class="tile-count ${c ? 'on' : ''}">${c}<small>個</small></div>
+        <button class="minus" data-minus="${esc(p.id)}" aria-label="${esc(p.name)}を1個減らす" ${c ? '' : 'disabled'}>
+          <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg></span>
+        </button>
+      </div>`;
+    }).join('');
+  }
+  const q = cartQty();
+  $('#cartQty').textContent = q + '個';
+  $('#cartAmt').textContent = yen(cartAmt());
+  $('#sendBtn').disabled = !q;
+  $('#sendBtn').textContent = q ? 'No.' + ticket + ' 送信' : '送信';
+  $('#undoBtn').disabled = !cartLog.length;
+
+  $('#waitEmpty').hidden = !!w.length;
+  if (!hold) $('#waitlist').innerHTML = w.map((o, i) => {
+    const rdy = o.status === 'ready';
+    return `
+    <div class="wcard ${rdy ? 'ready' : ''} ${!rdy && i === 0 ? 'next' : ''}">
+      <div class="wno">${o.ticket}<small>整理券</small></div>
+      <div class="witems">
+        ${rdy ? '<div class="wready">準備完了</div>' : '<div class="wcooking">調理中</div>'}
+        ${esc(itemsText(o))}<div class="sub">${hm(o.ts)} 受付 ・ ${o.items.reduce((a, x) => a + x.qty, 0)}個</div>
+      </div>
+      <div class="wact">
+        <button class="btn btn-green sm" data-done="${esc(o.id)}" ${rdy ? '' : 'disabled'}>お渡し完了</button>
+        <button class="hold" data-hold="${esc(o.id)}"><span class="fill"></span><span class="lbl">長押しで取消</span></button>
+      </div>
+    </div>`;
+  }).join('');
+
+  renderSheet();
+}
+
+function flash(pid) {
+  const el = document.querySelector(`.tile[data-id="${CSS.escape(pid)}"]`);
+  if (!el) return;
+  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 220);
+}
+
+let sheetMode = null, targetId = null;
+let stock = null;
+let rstep = 'cat', rdata = { cat: '', name: '', detail: '' };
+function openSheet(v, mode, id) {
+  sheetMode = v ? mode : null;
+  targetId = v ? (id || null) : null;
+  if (v && mode === 'reason') { rstep = 'cat'; rdata = { cat: '', name: '', detail: '' }; }
+  $('#sheet').classList.toggle('open', v); $('#scrim').classList.toggle('open', v);
+  $('#sheet').setAttribute('aria-hidden', !v);
+  if (v) renderSheet();
+}
+function renderSheet() {
+  if (!sheetMode) return;
+  if (sheetMode === 'reason') {
+    const o = orders.find(x => x.id === targetId);
+    if (!o) { openSheet(false); return; }
+    if (rstep === 'other' && $('#rName')) return;        // 入力中は作り直さない
+    const cooked = o.status === 'ready';
+    $('#sheetTitle').textContent = 'No.' + o.ticket + ' を取消';
+    if (rstep === 'cat') {
+      $('#sheetBody').innerHTML =
+        `<p class="cap-line" style="margin:0 4px 12px">${esc(itemsText(o))}${cooked ? '（調理済み）' : '（調理前）'}・取消理由を選んでください。</p>
+         <div class="list">
+           <button class="row pick" data-cat="商品不良"><span class="n">商品不良</span><span class="sub2">${cooked ? '廃棄する' : '材料は戻ります'}</span></button>
+           <button class="row pick" data-cat="お客様都合キャンセル"><span class="n">お客様都合キャンセル</span><span class="sub2">${cooked ? '余剰在庫に戻す' : '材料は戻ります'}</span></button>
+           <button class="row pick" data-cat="その他"><span class="n">その他</span><span class="sub2">担当者名と詳細を入力</span></button>
+         </div>`;
+    } else if (rstep === 'other') {
+      $('#sheetBody').innerHTML =
+        `<p class="cap-line" style="margin:0 4px 12px">受付をした人の名前と、取消の詳細を入力してください。両方の入力が必要です。</p>
+         <input class="field" id="rName" placeholder="受付者名" value="${esc(rdata.name)}" style="margin-bottom:12px">
+         <input class="field" id="rDetail" placeholder="詳細" value="${esc(rdata.detail)}">
+         <button class="btn btn-filled block" id="rNext" style="margin-top:16px">次へ</button>`;
+    } else {
+      $('#sheetBody').innerHTML =
+        `<p class="cap-line" style="margin:0 4px 12px">${esc(itemsText(o))} をどうしますか。</p>
+         <div class="list">
+           <button class="row pick" data-disp="stock"><span class="n">余剰在庫に戻す</span><span class="sub2">他の注文に充当</span></button>
+           <button class="row pick" data-disp="waste"><span class="n">廃棄する</span><span class="sub2">在庫から減らす</span></button>
+         </div>`;
+    }
+    return;
+  }
+  if (sheetMode === 'ticket') {
+    const n = ticketMax();
+    $('#sheetTitle').textContent = '次に発行する整理券番号';
+    $('#sheetBody').innerHTML =
+      '<div class="tgrid">' +
+      Array.from({ length: n }, (_, i) => i + 1).map(v => `<button data-t="${v}" aria-selected="${v === ticket}">${v}</button>`).join('') +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px">' +
+      '<button class="btn btn-tinted" style="flex:1" data-t="1">1に戻す</button>' +
+      '<button class="btn btn-tinted" style="flex:1" data-t="' + (ticket % n + 1) + '">この番号を飛ばす</button>' +
+      '</div>' +
+      '<p class="cap-line">次の注文に付ける番号です。全端末で共有され、1〜' + n + 'を順に使って' + n + 'の次は1に戻ります。' +
+      '紙の整理券をなくした時は番号を飛ばし、テスト後の本番開始時は1に戻してください。</p>';
+  } else {
+    const st = { waiting: '調理中', ready: '準備完了', done: 'お渡し済', void: '取消' };
+    const today = orders.filter(o => dayKey(o.ts) === dayKey(Date.now())).slice().reverse();
+    $('#sheetTitle').textContent = '本日の注文';
+    $('#sheetBody').innerHTML = today.length
+      ? `<div class="list">${today.map(o => `
+          <div class="row ${o.status === 'void' ? 'void' : ''}">
+            <span class="t">${hms(o.ts)}</span>
+            <span class="no">${o.ticket}</span>
+            <span class="n">${esc(itemsText(o))}<div class="st">${st[o.status]}</div></span>
+            ${o.status === 'done' ? `<button class="btn btn-plain" data-reopen="${esc(o.id)}" style="font-size:13px">戻す</button>` : ''}
+          </div>`).join('')}</div>
+         <p class="cap-line">${today.filter(o => o.status !== 'void').length}件（取消 ${today.filter(o => o.status === 'void').length}件）</p>`
+      : '<p class="cap-line" style="text-align:center;margin-top:32px">本日の注文はまだありません</p>';
+  }
+}
+
+function renderStatus() {
+  const el = $('#status'), t = el.querySelector('span');
+  el.className = 'status';
+  if (!GAS_URL) { el.classList.add('err'); t.textContent = 'URL未設定'; return; }
+  if (queue.length) {
+    el.classList.add('warn');
+    t.textContent = (online === false ? 'オフライン ' : '送信中 ') + queue.length;
+    return;
+  }
+  if (online === false) { el.classList.add('err'); t.textContent = '接続エラー'; return; }
+  if (online === true) { el.classList.add('ok'); t.textContent = '同期済み'; return; }
+  t.textContent = '確認中';
+}
+
+// ---------- 通知 ----------
+let ac = null;
+function tone(freq, at, dur, gain) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'triangle'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, ac.currentTime + at);
+  g.gain.exponentialRampToValueAtTime(gain, ac.currentTime + at + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + at + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(ac.currentTime + at); o.stop(ac.currentTime + at + dur + 0.02);
+}
+function chime() {
+  if (!sound) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    [0, 0.42].forEach(t => { tone(660, t, 0.18, 0.5); tone(990, t + 0.16, 0.3, 0.5); });
+  } catch (e) {}
+}
+function alertReady(n) {
+  chime();
+  if (navigator.vibrate) navigator.vibrate([140, 90, 140, 90, 260]);
+  toast(n > 1 ? n + '件が準備完了です' : '準備完了のオーダーがあります');
+  if (pane === 'sale') { /* 待ち画面に切り替えはしない（入力中のため） */ }
+}
+
+let toastTimer = null, toastFn = null;
+function toast(msg, act, fn) {
+  $('#toastMsg').textContent = msg;
+  const b = $('#toastAct');
+  b.textContent = act || ''; b.hidden = !act; toastFn = fn || null;
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 3000);
+}
+
+// ---------- 通信 ----------
+let flushTimer = null, syncing = false;
+function scheduleFlush() { clearTimeout(flushTimer); flushTimer = setTimeout(flush, 400); renderStatus(); }
+
+async function flush() {
+  renderStatus();
+  if (!GAS_URL || syncing || !queue.length) return;
+  syncing = true;
+  const batch = queue.slice(0, 50);
+  try {
+    const r = await fetch(GAS_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'sync', events: batch })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'error');
+    const sent = new Set(batch.map(e => e.eid));
+    queue = queue.filter(e => !sent.has(e.eid));
+    store(K.queue, queue);
+    let ch = false;
+    batch.forEach(e => {                                // サーバに登録済みの印
+      if (e.type !== 'order') return;
+      const o = orders.find(x => x.id === e.id);
+      if (o && !o.synced) { o.synced = true; ch = true; }
+    });
+    if (j.assigned) {                                   // サーバが確定させた整理券番号を反映
+      Object.keys(j.assigned).forEach(id => {
+        const o = orders.find(x => x.id === id);
+        if (o && o.ticket !== j.assigned[id]) { o.ticket = j.assigned[id]; ch = true; }
+      });
+    }
+    if (ch) store(K.orders, orders);
+    if (j.stock) stock = j.stock;
+    if (!queue.length && j.nextTicket) { ticket = j.nextTicket; store(K.ticket, ticket); }
+    online = true;
+    render();
+  } catch (e) {
+    online = false;
+  } finally {
+    syncing = false; renderStatus();
+    if (online && queue.length) scheduleFlush();
+  }
+}
+
+async function fetchConfig() {
+  if (!GAS_URL) { renderStatus(); return; }
+  try {
+    const r = await fetch(GAS_URL + '?action=config&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    applyReset(j.config.resetAt || 0);
+    cfg = j.config; store(K.cfg, cfg);
+    if (j.stock) stock = j.stock;
+    online = true; render();
+  } catch (e) {
+    if (!queue.length) online = false;
+  }
+  renderStatus();
+}
+
+// キッチン側の「調理完了」を取り込む
+async function fetchOrders() {
+  if (!GAS_URL) return;
+  try {
+    const r = await fetch(GAS_URL + '?action=orders&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    let changed = false;
+    if (j.stock && (!stock || JSON.stringify(stock.items) !== JSON.stringify(j.stock.items) || stock.warn !== j.stock.warn)) {
+      stock = j.stock; changed = true;
+    }
+    const pending = new Set(queue.map(e => e.id));
+    const srv = {}, tkt = {};
+    j.orders.forEach(o => { srv[o[0]] = o[4]; tkt[o[0]] = o[1]; });
+    let becameReady = 0;
+    const known = new Set(orders.map(o => o.id));
+
+    // 他の端末が入力した注文を取り込む
+    j.orders.forEach(o => {
+      if (known.has(o[0])) return;
+      orders.push({
+        id: o[0], ticket: o[1], ts: o[2],
+        items: JSON.parse(o[3] || '[]').map(it => ({ productId: it[0], name: it[1], price: it[2], qty: it[3] })),
+        status: o[4], synced: true
+      });
+      changed = true;
+    });
+
+    orders.forEach(o => {
+      if (pending.has(o.id)) return;                 // 未送信の操作がある注文は触らない
+      if (tkt[o.id] && tkt[o.id] !== o.ticket) { o.ticket = tkt[o.id]; changed = true; }
+      const st = srv[o.id];
+      if (st && st !== o.status && (o.status === 'waiting' || o.status === 'ready')) {
+        if (st === 'ready' && o.status === 'waiting') becameReady++;
+        o.status = st; changed = true;
+      } else if (!st && (o.status === 'waiting' || o.status === 'ready') && o.synced) {
+        o.status = 'done'; changed = true;           // 他の端末でお渡し／取消された
+      }
+    });
+    if (!queue.length && j.nextTicket && j.nextTicket !== ticket) { ticket = j.nextTicket; store(K.ticket, ticket); changed = true; }
+    if (changed) { store(K.orders, orders); render(); }
+    if (becameReady) alertReady(becameReady);
+    online = true;
+  } catch (e) {
+    if (!queue.length) online = false;
+  }
+  renderStatus();
+}
+
+function applyReset(resetAt) {
+  if (!resetAt || (cfg && cfg.resetAt === resetAt)) return;
+  orders = orders.filter(o => o.ts >= resetAt);
+  const ids = new Set(orders.map(o => o.id));
+  queue = queue.filter(e => ids.has(e.id));
+  store(K.orders, orders); store(K.queue, queue);
+}
+
+// ---------- イベント ----------
+$('#grid').addEventListener('click', e => {
+  const m = e.target.closest('[data-minus]');
+  if (m) { e.stopPropagation(); sub(m.dataset.minus); return; }
+  const t = e.target.closest('.tile');
+  if (!t) return;
+  const p = (cfg.products || []).find(x => x.id === t.dataset.id);
+  if (p) add(p);
+});
+$('#undoBtn').addEventListener('click', undo);
+$('#sendBtn').addEventListener('click', send);
+$('#head').addEventListener('click', () => { if (pane === 'sale') openSheet(true, 'ticket'); });
+$('#histBtn').addEventListener('click', () => openSheet(true, 'history'));
+$('#paneSeg').addEventListener('click', e => { const b = e.target.closest('[data-pane]'); if (b) setPane(b.dataset.pane); });
+$('#waitlist').addEventListener('click', e => {
+  const d = e.target.closest('[data-done]'); if (d) { done(d.dataset.done); return; }
+});
+$('#waitlist').addEventListener('pointerdown', e => {
+  const h = e.target.closest('[data-hold]');
+  if (!h) return;
+  e.preventDefault();
+  holdStart(h, h.dataset.hold);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+  document.addEventListener(ev, () => { if (hold) holdCancel(); }));
+$('#sheetBody').addEventListener('click', e => {
+  const o = orders.find(x => x.id === targetId);
+  const cooked = o && o.status === 'ready';
+  const cat = e.target.closest('[data-cat]');
+  if (cat) {
+    rdata.cat = cat.dataset.cat;
+    if (rdata.cat === 'その他') { rstep = 'other'; renderSheet(); return; }
+    const disp = !cooked ? 'none' : (rdata.cat === '商品不良' ? 'waste' : 'stock');
+    const id = targetId; openSheet(false); voidOrder(id, rdata.cat, disp);
+    return;
+  }
+  if (e.target.closest('#rNext')) {
+    rdata.name = ($('#rName').value || '').trim();
+    rdata.detail = ($('#rDetail').value || '').trim();
+    if (!rdata.name || !rdata.detail) { toast('名前と詳細の両方を入力してください'); return; }
+    if (!cooked) {                                    // 調理前は在庫に影響しない
+      const id = targetId; const r = 'その他／' + rdata.name + '／' + rdata.detail;
+      openSheet(false); voidOrder(id, r, 'none'); return;
+    }
+    rstep = 'disp'; renderSheet(); return;
+  }
+  const dp = e.target.closest('[data-disp]');
+  if (dp) {
+    const id = targetId;
+    const r = 'その他／' + rdata.name + '／' + rdata.detail;
+    openSheet(false); voidOrder(id, r, dp.dataset.disp);
+    return;
+  }
+  const t = e.target.closest('[data-t]'); if (t) { setTicket(+t.dataset.t); return; }
+  const r = e.target.closest('[data-reopen]'); if (r) { reopen(r.dataset.reopen); return; }
+});
+$('#soundBtn').addEventListener('click', () => {
+  sound = !sound; localStorage.setItem(K.sound, sound ? '1' : '0');
+  $('#soundBtn').setAttribute('aria-pressed', sound);
+  if (sound) chime();   // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
+});
+$('#closeSheet').addEventListener('click', () => openSheet(false));
+$('#scrim').addEventListener('click', () => openSheet(false));
+$('#toastAct').addEventListener('click', () => { const fn = toastFn; $('#toast').classList.remove('show'); if (fn) fn(); });
+
+function setPane(p) { pane = p; window.scrollTo(0, 0); render(); }
+
+// 左右スワイプで画面切り替え
+let sx = 0, sy = 0, sw = false;
+document.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1 || $('#sheet').classList.contains('open')) { sw = false; return; }
+  sx = e.touches[0].clientX; sy = e.touches[0].clientY; sw = true;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!sw) return; sw = false;
+  const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+  if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.8) return;
+  setPane(dx < 0 ? 'wait' : 'sale');
+}, { passive: true });
+
+document.addEventListener('dblclick', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+
+window.addEventListener('online', flush);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchConfig(); fetchOrders(); flush(); render(); } });
+
+orders = orders.filter(o => o.ts > Date.now() - 3 * 864e5); store(K.orders, orders);
+
+$('#soundBtn').setAttribute('aria-pressed', sound);
+render(); renderStatus();
+fetchConfig(); fetchOrders(); flush();
+setInterval(flush, 5000);
+setInterval(fetchOrders, 4000);
+setInterval(fetchConfig, 60000);
+setInterval(render, 60000);
+</script>
+</body>
+</html>

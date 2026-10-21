@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="売上速報">
+<title>売上速報</title>
+<style>
+:root {
+  --bg: #F2F2F7; --surface: #FFFFFF;
+  --separator: rgba(60,60,67,0.20); --fill: rgba(120,120,128,0.12);
+  --label: #000000; --label-2: rgba(60,60,67,0.60); --label-3: rgba(60,60,67,0.30);
+  --accent: #007AFF; --green: #34C759; --red: #FF3B30;
+  --r-md: 10px; --r-lg: 14px; --r-xl: 22px;
+  --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1); --dur: 280ms;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --surface: #1C1C1E;
+    --separator: rgba(84,84,88,0.65); --fill: rgba(120,120,128,0.24);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,0.60); --label-3: rgba(235,235,245,0.30);
+    --accent: #0A84FF; --green: #30D158; --red: #FF453A;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; color: var(--label);
+  background: var(--bg); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+  touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom)); }
+.ic { width: 20px; height: 20px; display: block; }
+.wrap { max-width: 560px; margin: 0 auto; padding: 0 var(--sp-4); }
+
+.nav { position: sticky; top: 0; z-index: 10; padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+.nav-in { max-width: 560px; margin: 0 auto; padding: var(--sp-3) var(--sp-4);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.nav h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.home-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--r-md);
+  background: var(--fill); color: var(--label-2); flex: none; text-decoration: none; }
+.home-btn:active { opacity: 0.4; }
+.left { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--label-2); white-space: nowrap; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); }
+.live.ok i { background: var(--green); }
+.live.err i { background: var(--red); }
+
+.card { background: var(--surface); border-radius: var(--r-xl); padding: var(--sp-6); margin-top: var(--sp-3); }
+.card .k { font-size: 15px; color: var(--label-2); }
+.card .v { font-size: 56px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05;
+  font-variant-numeric: tabular-nums; margin-top: var(--sp-2); }
+.card .v span { font-size: 22px; font-weight: 590; color: var(--label-2); margin-left: 4px; }
+.head-lb { font-size: 13px; color: var(--label-2); margin: var(--sp-6) var(--sp-3) 0; }
+.list { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; margin-top: var(--sp-2); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  min-height: 52px; padding: var(--sp-2) var(--sp-4); }
+.row + .row { box-shadow: inset 0 0.5px 0 var(--separator); }
+.row .n { font-size: 15px; }
+.row .val { font-variant-numeric: tabular-nums; text-align: right; }
+.row .sub { font-size: 13px; color: var(--label-2); }
+.seg { display: flex; padding: 2px; background: var(--fill); border-radius: 9px; margin-top: var(--sp-3); }
+.seg button { flex: 1; min-height: 34px; border: 0; border-radius: 7px; background: none; font: inherit;
+  font-size: 13px; font-weight: 590; color: var(--label); cursor: pointer; }
+.seg button[aria-selected="true"] { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.cap { font-size: 13px; color: var(--label-2); margin: var(--sp-3) var(--sp-3) 0; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <div class="left">
+      <a class="home-btn" href="index.html" aria-label="メニュー">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10.5V19h11v-8.5"/></svg>
+      </a>
+      <h1>売上速報</h1>
+    </div>
+    <div class="live" id="live"><i></i><span>読み込み中</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="seg" id="range">
+    <button data-r="today" aria-selected="true">本日</button>
+    <button data-r="all" aria-selected="false">全期間</button>
+  </div>
+
+  <div class="card">
+    <div class="k" id="kAmt">本日の売上金額</div>
+    <div class="v" id="amt">¥0</div>
+  </div>
+  <div class="card">
+    <div class="k" id="kQty">本日の販売個数</div>
+    <div class="v" id="qty">0<span>個</span></div>
+  </div>
+
+  <p class="head-lb">日別</p>
+  <div class="list" id="days"></div>
+  <p class="cap">10秒ごとに自動更新されます。取り消した注文は含みません。</p>
+</main>
+
+<script>
+// ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
+const GAS_URL = '';
+// ================================================================
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const yen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
+const pad = n => String(n).padStart(2, '0');
+const hms = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); };
+
+let data = null, range = 'today', connOk = null, lastOk = 0;
+
+async function fetchSales() {
+  if (!GAS_URL) { $('#live').className = 'live err'; $('#live').querySelector('span').textContent = 'URL未設定'; return; }
+  try {
+    const r = await fetch(GAS_URL + '?action=sales&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    data = j.sales; connOk = true; lastOk = Date.now();
+    render();
+  } catch (e) {
+    connOk = false; renderLive();
+  }
+}
+
+function render() {
+  if (!data) return;
+  const cur = range === 'today' ? data.today : data.total;
+  $('#kAmt').textContent = (range === 'today' ? '本日' : '全期間') + 'の売上金額';
+  $('#kQty').textContent = (range === 'today' ? '本日' : '全期間') + 'の販売個数';
+  $('#amt').textContent = yen(cur.amount || 0);
+  $('#qty').innerHTML = (cur.qty || 0) + '<span>個</span>';
+  document.querySelectorAll('#range button').forEach(b => b.setAttribute('aria-selected', b.dataset.r === range));
+
+  const days = (data.days || []).slice().reverse();
+  $('#days').innerHTML = days.length
+    ? days.map(d => `<div class="row"><span class="n">${esc(d.date)}</span>
+        <span class="val">${yen(d.amount)}<div class="sub">${d.qty}個</div></span></div>`).join('')
+    : '<div class="row"><span class="n sub">まだ販売がありません</span></div>';
+  renderLive();
+}
+
+function renderLive() {
+  const el = $('#live'), t = el.querySelector('span');
+  el.className = 'live ' + (connOk === true ? 'ok' : connOk === false ? 'err' : '');
+  t.textContent = connOk === false ? '接続エラー' : lastOk ? '更新 ' + hms(lastOk) : '読み込み中';
+}
+
+$('#range').addEventListener('click', e => {
+  const b = e.target.closest('[data-r]');
+  if (b) { range = b.dataset.r; render(); }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) fetchSales(); });
+
+fetchSales();
+setInterval(() => { if (!document.hidden) fetchSales(); }, 10000);
+</script>
+</body>
+</html>
