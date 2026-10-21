@@ -229,7 +229,7 @@ td.z { color: var(--label-3); }
   <p>数え直した実際の個数に合わせます。仕入れ記録は変わりません。</p>
   <div class="frow" style="background:var(--surface-2);border-radius:var(--r-md);margin-bottom:16px">
     <label style="width:auto;flex:1">実際の残り個数</label>
-    <input class="field r" id="adjPcs" type="number" inputmode="numeric" min="0" style="max-width:110px;background:var(--surface)"><span class="unit">個</span>
+    <input class="field r" id="adjPcs" type="number" inputmode="numeric" min="0" style="max-width:110px;background:var(--surface)"><span class="unit" id="adjUnit">個</span>
   </div>
   <button class="btn btn-filled block" id="adjSet">この個数に設定</button>
   <button class="btn btn-danger block" id="adjZero" style="margin-top:8px">0個にする（売り切れ）</button>
@@ -244,7 +244,7 @@ td.z { color: var(--label-3); }
 
 <script>
 // ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyTbZKjyx7FmA7z_p4IJItgTJWYkmgyKjLfqo-TQWF_RX6D4zyKSb2e9QX37CzyQlyS/exec';
+const GAS_URL = '';
 // ================================================================
 
 const PALETTE = ['#FFCC00', '#FF9500', '#A2845E', '#AF52DE', '#FF2D55', '#34C759', '#007AFF', '#5AC8FA', '#FFCC00'];
@@ -335,19 +335,16 @@ function showApp() { $('#loginView').hidden = true; $('#appView').hidden = false
 function dates() { return [...new Set(data.orders.map(o => dayKey(o.ts)))].sort(); }
 
 const itemOf = p => p.flavor || p.name;
-function unitCostOf(item) {                   // 品目1個あたりの仕入れ単価（その品目の仕入れだけで計算）
+const POTATO = 'ジャガイモ', SOUP = 'スープの素';
+const materials = () => (data && data.config.materials) || [{ name: POTATO, unit: '個' }, { name: SOUP, unit: '杯' }];
+const unitOf = item => { const m = materials().find(x => x.name === item); return m ? m.unit : '個'; };
+function unitCostOf(item) {                   // 材料1個（1杯分）あたりの仕入れ単価 = 仕入れ総額 ÷ 個数（杯数）
   const pur = (data.config.purchases || []).filter(q => q.item === item);
   const pcs = pur.reduce((a, q) => a + (Number(q.pcsPerBag) || 0) * (Number(q.bags) || 0), 0);
-  const amt = pur.reduce((a, q) => a + (Number(q.pricePerBag) || 0) * (Number(q.bags) || 0), 0);
+  const amt = pur.reduce((a, q) => a + (Number(q.amount) || 0), 0);
   return pcs ? amt / pcs : 0;
 }
 const productCost = p => Math.round(unitCostOf(itemOf(p)) * (Number(p.pcs) || 0));
-function itemNames(cfg) {                     // 在庫の品目一覧（商品の品目＋仕入れ済みの品目）
-  const ks = [];
-  cfg.products.forEach(p => { const k = itemOf(p); if (k && !ks.includes(k)) ks.push(k); });
-  (cfg.purchases || []).forEach(q => { if (q.item && !ks.includes(q.item)) ks.push(q.item); });
-  return ks;
-}
 
 function compute() {
   const cfg = data.config;
@@ -571,68 +568,82 @@ function renderStock(c) {
   const st = data.stock || { items: [], warn: false };
   const items = st.items || [];
   const pur = (cfg.purchases || []).slice().reverse();
-  const names = itemNames(cfg);
   const colorOfItem = k => { const p = cfg.products.find(x => itemOf(x) === k); return p ? p.color : '#8E8E93'; };
+  const usedBy = k => cfg.products.filter(x => itemOf(x) === k).map(x => x.name).join('・');
   const sp = data.surplus || {};
+  const yen2 = n => yen(Math.round(n * 100) / 100);
+  const warnLeft = cfg.warnLeft || {};
 
   $('#main').innerHTML = `
     <div class="cards">
-      ${items.length ? items.map(it => `
+      ${items.map(it => `
       <div class="card wide" style="${it.warn ? 'box-shadow:inset 0 0 0 2px var(--red)' : ''}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
           <div style="min-width:0">
-            <div class="k"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${esc(colorOfItem(it.item))}"></span>${esc(it.item)} 残り</div>
-            <div class="v" style="font-size:44px;${it.warn ? 'color:var(--red)' : ''}">${it.left}<span style="font-size:20px;font-weight:590"> 個</span></div>
+            <div class="k"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${esc(colorOfItem(it.item))}"></span>${esc(it.item)} 残り${usedBy(it.item) ? '（' + esc(usedBy(it.item)) + '）' : ''}</div>
+            <div class="v" style="font-size:44px;${it.warn ? 'color:var(--red)' : ''}">${it.left}<span style="font-size:20px;font-weight:590"> ${esc(it.unit)}</span></div>
           </div>
           <button class="btn btn-tinted" data-adj="${esc(it.item)}" style="min-height:40px;font-size:15px;flex:none">差異</button>
         </div>
-        <div class="s">${it.total ? '仕入れ ' + it.total + '個 − 使用 ' + it.used + '個 ・ 単価 ' + yen(Math.round(it.unitCost * 100) / 100) + '/個' : '仕入れを登録してください'}${it.perBag ? ' ・ 約 ' + (Math.round(it.left / it.perBag * 10) / 10) + ' 袋分' : ''}${it.warn ? ' ・ 警告ライン ' + it.warnAt + '個を下回っています' : ''}</div>
-      </div>`).join('') : '<div class="card wide"><div class="k">設定タブで商品を登録してください</div></div>'}
+        <div class="s">${it.total ? '仕入れ ' + it.total + it.unit + ' − 使用 ' + it.used + it.unit + ' ・ 原価 ' + yen2(it.unitCost) + '/' + it.unit : '仕入れを登録してください'}${it.warn ? ' ・ 警告ライン ' + it.warnAt + it.unit + 'を下回っています' : ''}</div>
+      </div>`).join('')}
     </div>
     ${st.adjustedAt ? '<p class="cap">最終調整 ' + dayLabel(dayKey(st.adjustedAt)).replace(/（.）/, '') + ' ' + hms(st.adjustedAt).slice(0, 5) + '</p>' : ''}
+
+    <section class="group">
+      <p class="group-head"><span>ジャガイモを仕入れ</span></p>
+      <div class="list">
+        <div class="frow"><label>個数</label><input class="field r" id="qPotQty" type="number" inputmode="numeric" min="0" placeholder="例：60"><span class="unit">個</span></div>
+        <div class="frow"><label>総額</label><input class="field r" id="qPotAmt" type="number" inputmode="numeric" min="0" placeholder="例：3000"><span class="unit">円</span></div>
+      </div>
+      <button class="btn btn-filled block" data-addq="${POTATO}" style="margin-top:12px">ジャガイモを登録</button>
+    </section>
+
+    <section class="group">
+      <p class="group-head"><span>スープの素を仕入れ</span></p>
+      <div class="list">
+        <div class="frow"><label>1袋の杯数</label><input class="field r" id="qSoupCups" type="number" inputmode="numeric" min="0" placeholder="1袋で何杯分 例：10"><span class="unit">杯</span></div>
+        <div class="frow"><label>袋数</label><input class="field r" id="qSoupBags" type="number" inputmode="numeric" min="0" value="1"><span class="unit">袋</span></div>
+        <div class="frow"><label>仕入れ金額</label><input class="field r" id="qSoupAmt" type="number" inputmode="numeric" min="0" placeholder="合計 例：1200"><span class="unit">円</span></div>
+      </div>
+      <button class="btn btn-filled block" data-addq="${SOUP}" style="margin-top:12px">スープの素を登録</button>
+      <p class="cap" id="stockMsg">${esc(saveMsg)}</p>
+      <p class="cap">原価は ジャガイモ＝総額÷個数、スープの素＝仕入れ金額÷（杯数×袋数）で計算し、商品の「使用量」を掛けて1個あたりの原価にします。マヨネーズ・容器などは設定タブの固定材料費に入れてください。</p>
+    </section>
 
     <section class="group">
       <p class="group-head"><span>余剰在庫（取消で作り置き）</span></p>
       <div class="list">
         ${Object.keys(sp).length ? Object.keys(sp).map(f => `
-          <div class="row"><span class="row-label">${esc(f)}</span><span class="row-value">${sp[f]}個</span></div>`).join('')
+          <div class="row"><span class="row-label">${esc(f)}</span><span class="row-value">${sp[f]}${esc(unitOf(f))}</span></div>`).join('')
           : '<div class="row"><span class="row-label row-sub">なし</span></div>'}
       </div>
     </section>
 
     <section class="group">
-      <p class="group-head"><span>仕入れを追加</span><span>袋・箱・缶など仕入れ単位で</span></p>
+      <p class="group-head"><span>在庫警告</span><span>残りがこの数を下回ったら警告</span></p>
       <div class="list">
-        <div class="frow"><label>品目</label><select class="field" id="qItem">${names.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
-        <div class="frow"><label>1袋の個数</label><input class="field r" id="qPcs" type="number" inputmode="numeric" min="0" placeholder="作れる数 例：40"><span class="unit">個</span></div>
-        <div class="frow"><label>袋数</label><input class="field r" id="qBags" type="number" inputmode="numeric" min="0" placeholder="例：3"><span class="unit">袋</span></div>
-        <div class="frow"><label>1袋の金額</label><input class="field r" id="qPrice" type="number" inputmode="numeric" min="0" placeholder="例：2400"><span class="unit">円</span></div>
-      </div>
-      <button class="btn btn-filled block" id="addQ" style="margin-top:12px">仕入れを登録</button>
-      <p class="cap" id="stockMsg">${esc(saveMsg)}</p>
-      <p class="cap">じゃがいも・マヨネーズなど材料が複数ある品目は、「何個分をいくらで仕入れたか」にまとめて登録してください。原価は品目ごとに 仕入れ金額 ÷ 個数 で計算します。</p>
-    </section>
-
-    <section class="group">
-      <p class="group-head"><span>在庫警告</span></p>
-      <div class="frow" style="background:var(--surface);border-radius:var(--r-lg)">
-        <label style="width:auto;flex:1">各品目の残りがこの袋数を下回ったら警告</label>
-        <input class="field r" id="warnBags" type="number" inputmode="numeric" min="0" step="0.5" value="${cfg.warnBags}" style="max-width:90px"><span class="unit">袋</span>
+        ${materials().map(m => `
+        <div class="frow"><label style="width:auto;flex:1">${esc(m.name)}</label>
+          <input class="field r" data-warn="${esc(m.name)}" type="number" inputmode="numeric" min="0" value="${Number(warnLeft[m.name]) || 0}" style="max-width:90px"><span class="unit">${esc(m.unit)}</span></div>`).join('')}
       </div>
       <button class="btn btn-tinted block" id="saveWarn" style="margin-top:12px">警告設定を保存</button>
-      <p class="cap">警告中は販売・キッチンの画面上部に赤字で表示されます。現在の警告ライン：${items.map(it => esc(it.item) + ' ' + it.warnAt + '個').join(' ／ ') || '—'}</p>
+      <p class="cap">警告中は販売・キッチンの画面上部に赤字で表示されます。</p>
     </section>
 
     <section class="group">
       <p class="group-head"><span>仕入れ履歴</span><span>${(cfg.purchases || []).length}件</span></p>
       <div class="list">
-        ${pur.length ? pur.map(q => `
+        ${pur.length ? pur.map(q => {
+          const n = q.pcsPerBag * q.bags, u = unitOf(q.item);
+          const detail = q.item === SOUP ? q.pcsPerBag + '杯/袋 × ' + q.bags + '袋' : n + u;
+          return `
           <div class="row">
-            <span class="row-label">${esc(q.item || '品目未設定')}　${dayLabel(dayKey(q.ts))} ${hms(q.ts).slice(0, 5)}
-              <div class="row-sub">${q.pcsPerBag}個 × ${q.bags}袋 ・ ${yen(q.pricePerBag)}/袋</div></span>
-            <span class="row-value">${q.pcsPerBag * q.bags}個<div class="row-sub">${yen(q.pricePerBag * q.bags)}</div></span>
+            <span class="row-label">${esc(q.item || '材料未設定')}　${dayLabel(dayKey(q.ts))} ${hms(q.ts).slice(0, 5)}
+              <div class="row-sub">${detail}${n ? ' ・ ' + yen2(q.amount / n) + '/' + u : ''}</div></span>
+            <span class="row-value">${n}${u}<div class="row-sub">${yen(q.amount)}</div></span>
             <button class="icon-btn" data-delq="${esc(q.id)}" aria-label="削除"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M7 7l1 12h8l1-12"/><path d="M10 7V4h4v3"/></svg></button>
-          </div>`).join('') : '<div class="row"><span class="row-label row-sub">まだ登録がありません</span></div>'}
+          </div>`; }).join('') : '<div class="row"><span class="row-label row-sub">まだ登録がありません</span></div>'}
       </div>
     </section>`;
 }
@@ -643,13 +654,13 @@ function renderSettings() {
   const fixedTotal = draft.fixedCosts.reduce((a, f) => a + (Number(f.amount) || 0), 0);
   $('#main').innerHTML = `
     <section class="group">
-      <p class="group-head"><span>商品</span><span>同じ品目は在庫を共有</span></p>
+      <p class="group-head"><span>商品</span><span>原価＝材料単価×使用量</span></p>
       ${draft.products.map((p, i) => `
         <div class="list pcard" data-pi="${i}">
           <div class="frow"><label>商品名</label><input class="field" data-f="name" value="${esc(p.name)}" placeholder="例：じゃがマヨ"></div>
-          <div class="frow"><label>品目</label><input class="field" data-f="flavor" value="${esc(p.flavor || '')}" placeholder="${esc(p.name || '商品名と同じ')}"></div>
+          <div class="frow"><label>使う材料</label><select class="field" data-f="flavor">${materials().map(m => `<option value="${esc(m.name)}" ${m.name === p.flavor ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
           <div class="frow"><label>価格</label><input class="field r" data-f="price" type="number" inputmode="numeric" min="0" value="${p.price}"><span class="unit">円</span></div>
-          <div class="frow"><label>在庫消費</label><input class="field r" data-f="pcs" type="number" inputmode="numeric" min="0" value="${p.pcs == null ? 1 : p.pcs}"><span class="unit">個</span></div>
+          <div class="frow"><label>使用量</label><input class="field r" data-f="pcs" type="number" inputmode="numeric" min="0" value="${p.pcs == null ? 1 : p.pcs}"><span class="unit">${esc(unitOf(p.flavor))}/1個</span></div>
           <div class="frow"><label>原価</label><span style="flex:1;text-align:right;color:var(--label-2);font-variant-numeric:tabular-nums">${yen(productCost(p))}</span><span class="unit">/個</span></div>
           <div class="frow"><label>色</label><div class="swatches">${PALETTE.map(col => `<button class="sw-c" data-color="${col}" aria-pressed="${col === p.color}" aria-label="色"><span style="background:${col}"></span></button>`).join('')}</div></div>
           <div class="frow"><label style="width:auto;flex:1">販売画面に表示</label><label class="sw"><input type="checkbox" data-f="active" ${p.active !== false ? 'checked' : ''}><span class="sw-track"></span></label></div>
@@ -719,6 +730,7 @@ function openAdjust(v) {
   if (v) {
     const it = ((data.stock || {}).items || []).find(x => x.item === adjItem);
     $('#adjTitle').textContent = adjItem + ' の残り個数を合わせる';
+    $('#adjUnit').textContent = unitOf(adjItem);
     $('#adjPcs').value = it ? it.left : 0;
   }
 }
@@ -776,6 +788,7 @@ $('#main').addEventListener('input', e => {
     p[t.dataset.f] = (t.dataset.f === 'name' || t.dataset.f === 'flavor')
       ? t.value : Math.max(0, Math.round(Number(t.value) || 0));
     markDirty();
+    if (t.dataset.f === 'flavor') renderSettings();   // 使用量の単位と原価を材料に合わせて更新
   } else if (fc && t.dataset.g) {
     const f = draft.fixedCosts[+fc.dataset.fi];
     f[t.dataset.g] = t.dataset.g === 'name' ? t.value : Math.max(0, Math.round(Number(t.value) || 0));
@@ -792,7 +805,7 @@ $('#main').addEventListener('click', e => {
   }
   if (t.closest('#csvBtn')) { exportCsv(); return; }
   if (t.closest('#addP')) {
-    draft.products.push({ id: newId('p_'), name: '', flavor: '', price: 0, pcs: 1, color: PALETTE[draft.products.length % PALETTE.length], active: true });
+    draft.products.push({ id: newId('p_'), name: '', flavor: materials()[0].name, price: 0, pcs: 1, color: PALETTE[draft.products.length % PALETTE.length], active: true });
     markDirty(); renderSettings(); return;
   }
   if (t.closest('#addF')) { draft.fixedCosts.push({ id: newId('f_'), name: '', amount: 0 }); markDirty(); renderSettings(); return; }
@@ -808,14 +821,19 @@ $('#main').addEventListener('click', e => {
   if (df) { draft.fixedCosts.splice(+df.dataset.delf, 1); markDirty(); renderSettings(); return; }
   const ab = t.closest('[data-adj]');
   if (ab) { adjItem = ab.dataset.adj; openAdjust(true); return; }
-  if (t.closest('#addQ')) {
-    const item = $('#qItem') ? $('#qItem').value : '';
-    const pcs = Math.max(0, Math.round(Number($('#qPcs').value) || 0));
-    const bags = Math.max(0, Math.round(Number($('#qBags').value) || 0));
-    const price = Math.max(0, Math.round(Number($('#qPrice').value) || 0));
-    if (!item) { saveMsg = '先に設定タブで商品を登録してください'; $('#stockMsg').textContent = saveMsg; return; }
-    if (!pcs || !bags) { saveMsg = '1袋の個数と袋数を入力してください'; $('#stockMsg').textContent = saveMsg; return; }
-    draft.purchases = (draft.purchases || []).concat([{ id: newId('q_'), ts: Date.now(), item, pcsPerBag: pcs, bags: bags, pricePerBag: price }]);
+  const aq = t.closest('[data-addq]');
+  if (aq) {
+    const item = aq.dataset.addq;
+    const v = id => Math.max(0, Math.round(Number($(id).value) || 0));
+    let q;
+    if (item === POTATO) {                       // ジャガイモ：個数と総額
+      q = { pcsPerBag: v('#qPotQty'), bags: 1, amount: v('#qPotAmt') };
+      if (!q.pcsPerBag) { saveMsg = 'ジャガイモの個数を入力してください'; $('#stockMsg').textContent = saveMsg; return; }
+    } else {                                     // スープの素：1袋の杯数・袋数・仕入れ金額
+      q = { pcsPerBag: v('#qSoupCups'), bags: v('#qSoupBags'), amount: v('#qSoupAmt') };
+      if (!q.pcsPerBag || !q.bags) { saveMsg = '1袋の杯数と袋数を入力してください'; $('#stockMsg').textContent = saveMsg; return; }
+    }
+    draft.purchases = (draft.purchases || []).concat([Object.assign({ id: newId('q_'), ts: Date.now(), item }, q)]);
     dirty = true; save(); return;
   }
   const dq = t.closest('[data-delq]');
@@ -827,7 +845,8 @@ $('#main').addEventListener('click', e => {
     return;
   }
   if (t.closest('#saveWarn')) {
-    draft.warnBags = Math.max(0, Number($('#warnBags').value) || 0);
+    draft.warnLeft = {};
+    document.querySelectorAll('[data-warn]').forEach(el => { draft.warnLeft[el.dataset.warn] = Math.max(0, Math.round(Number(el.value) || 0)); });
     dirty = true; save(); return;
   }
   if (t.closest('#saveBtn')) { save(); return; }

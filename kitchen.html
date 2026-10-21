@@ -185,6 +185,8 @@ const colorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id ==
 const pcsOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.pcs) || 0 : 0; };
 const flavorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? (p.flavor || p.name) : ''; };
 const nameOf = (pid, fallback) => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.name : fallback; };
+const surplusName = f => { const p = (cfg && cfg.products || []).find(x => (x.flavor || x.name) === f); return p ? p.name : f; };
+const unitOf = f => { const it = (stock && stock.items || []).find(x => x.item === f); return it ? it.unit : '個'; };
 const statusOf = o => local[o.id] || o.status;
 
 // ---------- 操作 ----------
@@ -208,39 +210,68 @@ function mark(id, ready) {
   flush();
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+/** タイムアウト付き fetch（電波が悪いと fetch が何分も返らず、後続の通信が全部止まるのを防ぐ） */
+async function fetchJSON(url, opt, ms, ctl) {
+  ctl = ctl || new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { const r = await fetch(url, Object.assign({ signal: ctl.signal }, opt)); return await r.json(); }
+  finally { clearTimeout(t); }
+}
+
 let syncing = false;
 async function flush() {
   if (!GAS_URL || syncing || !queue.length) return;
   syncing = true;
   const batch = queue.slice(0, 50);
   try {
-    const r = await fetch(GAS_URL, {
+    const j = await fetchJSON(GAS_URL, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'sync', events: batch })
-    });
-    const j = await r.json();
+    }, 15000);
     if (!j.ok) throw new Error(j.error || 'error');
     const sent = new Set(batch.map(e => e.eid));
     queue = queue.filter(e => !sent.has(e.eid));
     store(K.queue, queue);
     if (j.stock) stock = j.stock;
-    connOk = true;
-    fetchOrders(false);
+    connOk = true; renderStatus();                // 最新の一覧は待ち受け側にすぐ届く
   } catch (e) {
     connOk = false; renderStatus();
   } finally {
     syncing = false;
-    if (queue.length) setTimeout(flush, 3000);
+    if (queue.length) setTimeout(flush, connOk ? 50 : 2000);
   }
 }
 
-// ---------- 取得 ----------
-async function fetchOrders(initial) {
-  if (!GAS_URL) return;
+// ---------- 取得（ロングポーリング） ----------
+// サーバは注文が変わった瞬間に応答を返す。変化がなければ約20秒で「変化なし」を返し、すぐ次の待ち受けに入る。
+let rev = '', pollGen = 0, pollCtl = null;
+async function pollLoop() {
+  const gen = ++pollGen;
+  dropPoll();                                    // 古い待ち受けは捨てる
+  rev = '';                                      // 最初は全件をシートから読む
+  let fails = 0;
+  while (gen === pollGen && !document.hidden) {
+    pollCtl = new AbortController();
+    const r = await fetchOrders(pollCtl);
+    if (gen !== pollGen) return;
+    if (r === 'ok') fails = 0;
+    else if (r === 'legacy') await sleep(3000);  // 旧版のGAS（待ち受け非対応）なら従来どおり3秒間隔
+    else await sleep(Math.min(8000, 1000 * 2 ** fails++));
+  }
+}
+function dropPoll() { if (pollCtl) { pollCtl.dropped = true; pollCtl.abort(); } }
+function stopPoll() { pollGen++; dropPoll(); }
+
+async function fetchOrders(ctl) {
+  if (!GAS_URL) return 'err';
   try {
-    const r = await fetch(GAS_URL + '?action=orders&t=' + Date.now());
-    const j = await r.json();
+    const url = GAS_URL + '?action=orders' + (rev ? '&since=' + encodeURIComponent(rev) + '&wait=1' : '') + '&t=' + Date.now();
+    const j = await fetchJSON(url, {}, 35000, ctl);
     if (!j.ok) throw new Error(j.error);
+    connOk = true; lastOk = Date.now();
+    if (j.unchanged) { rev = j.rev; renderStatus(); return 'ok'; }
+    if (j.rev && rev && Number(j.rev) < Number(rev)) return 'ok';   // 追い越された古い応答は使わない
     cfg = j.config;
     surplus = j.surplus || {};
     if (j.stock) stock = j.stock;
@@ -253,13 +284,17 @@ async function fetchOrders(initial) {
     orders = next;
     orders.forEach(o => { seen.add(o.id); if (local[o.id] === o.status) delete local[o.id]; });
     Object.keys(local).forEach(id => { if (!orders.some(o => o.id === id)) delete local[id]; });
-    connOk = true; lastOk = Date.now();
     render(fresh.map(o => o.id));
     if (!first && fresh.length && sound) beep(fresh.length);
     else if (!first && fresh.length && navigator.vibrate) navigator.vibrate([300, 120, 300]);
     first = false;
+    if (!j.rev) return 'legacy';
+    rev = j.rev;
+    return 'ok';
   } catch (e) {
+    if (ctl && ctl.dropped) return 'aborted';
     connOk = false; renderStatus();
+    return 'err';
   }
 }
 
@@ -289,7 +324,7 @@ function render(freshIds) {
   const wb = $('#warnBar');
   if (stock && stock.warn) {
     wb.hidden = false;
-    wb.textContent = stock.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + '個').join(' / ') + '（在庫わずか）';
+    wb.textContent = stock.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + (x.unit || '個')).join(' / ') + '（在庫わずか）';
   } else wb.hidden = true;
   renderStatus();
 
@@ -305,7 +340,7 @@ function render(freshIds) {
   const left = Object.keys(rem).filter(f => rem[f] > 0);
   $('#surplus').innerHTML = left.length
     ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(f =>
-        `<div class="tchip sp"><span>${esc(f)}</span><b>${rem[f]}</b><span>個</span></div>`).join('')
+        `<div class="tchip sp"><span>${esc(surplusName(f))}</span><b>${rem[f]}</b><span>${esc(unitOf(f))}</span></div>`).join('')
     : '';
 
   $('#empty').hidden = !!orders.length;
@@ -392,11 +427,24 @@ $('#soundBtn').addEventListener('click', () => {
 document.addEventListener('dblclick', e => e.preventDefault());
 document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('gesturechange', e => e.preventDefault());
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchOrders(false); flush(); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { stopPoll(); return; }
+  pollLoop(); flush(); keepAwake();
+});
+window.addEventListener('online', () => { if (!document.hidden) { pollLoop(); flush(); } });
+
+// 画面を消灯させない（消灯・ロックすると通信が止まり、オーダーが遅れて見える）
+let wakeLock = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && !wakeLock && !document.hidden) {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } } catch (e) {}
+}
+document.addEventListener('click', keepAwake);
 
 $('#soundBtn').setAttribute('aria-pressed', sound);
-fetchOrders(true); flush();
-setInterval(() => { if (!document.hidden) fetchOrders(false); }, 3000);
+pollLoop(); flush(); keepAwake();
 setInterval(tickAges, 10000);
 </script>
 </body>

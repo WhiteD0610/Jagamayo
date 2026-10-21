@@ -265,7 +265,7 @@ body {
 
 <script>
 // ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyTbZKjyx7FmA7z_p4IJItgTJWYkmgyKjLfqo-TQWF_RX6D4zyKSb2e9QX37CzyQlyS/exec';
+const GAS_URL = '';
 // ================================================================
 
 const K = { cfg: 'jaga_cfg_v2', orders: 'jaga_orders_v2', queue: 'jaga_queue_v2',
@@ -303,7 +303,7 @@ function surplusOf(o) {                                // 品目ごとの個数�
   o.items.forEach(i => { const f = flavorOf(i.productId); if (f) m[f] = (m[f] || 0) + pcsOf(i.productId) * i.qty; });
   return Object.keys(m).map(f => ({ flavor: f, pieces: m[f] }));
 }
-const warnText = st => st.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + '個').join(' / ') + '（在庫わずか）';
+const warnText = st => st.items.filter(x => x.warn).map(x => x.item + ' 残り' + x.left + (x.unit || '個')).join(' / ') + '（在庫わずか）';
 const itemsText = o => o.items.map(i => i.name + '×' + i.qty).join(' / ');
 
 // ---------- 注文操作 ----------
@@ -611,7 +611,15 @@ function toast(msg, act, fn) {
 
 // ---------- 通信 ----------
 let flushTimer = null, syncing = false;
-function scheduleFlush() { clearTimeout(flushTimer); flushTimer = setTimeout(flush, 400); renderStatus(); }
+function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms == null ? 30 : ms); renderStatus(); }
+
+/** タイムアウト付き fetch（電波が悪いと fetch が何分も返らず、その間ずっと送信が止まるのを防ぐ） */
+async function fetchJSON(url, opt, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { const r = await fetch(url, Object.assign({ signal: ctl.signal }, opt)); return await r.json(); }
+  finally { clearTimeout(t); }
+}
 
 async function flush() {
   renderStatus();
@@ -619,20 +627,20 @@ async function flush() {
   syncing = true;
   const batch = queue.slice(0, 50);
   try {
-    const r = await fetch(GAS_URL, {
+    const j = await fetchJSON(GAS_URL, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'sync', events: batch })
-    });
-    const j = await r.json();
+    }, 15000);
     if (!j.ok) throw new Error(j.error || 'error');
     const sent = new Set(batch.map(e => e.eid));
     queue = queue.filter(e => !sent.has(e.eid));
     store(K.queue, queue);
     let ch = false;
+    const now = Date.now();
     batch.forEach(e => {                                // サーバに登録済みの印
       if (e.type !== 'order') return;
       const o = orders.find(x => x.id === e.id);
-      if (o && !o.synced) { o.synced = true; ch = true; }
+      if (o && !o.synced) { o.synced = true; o.syncedAt = now; ch = true; }
     });
     if (j.assigned) {                                   // サーバが確定させた整理券番号を反映
       Object.keys(j.assigned).forEach(id => {
@@ -649,15 +657,14 @@ async function flush() {
     online = false;
   } finally {
     syncing = false; renderStatus();
-    if (online && queue.length) scheduleFlush();
+    if (queue.length) scheduleFlush(online ? 30 : 2000);   // 失敗時も2秒後に再送
   }
 }
 
 async function fetchConfig() {
   if (!GAS_URL) { renderStatus(); return; }
   try {
-    const r = await fetch(GAS_URL + '?action=config&t=' + Date.now());
-    const j = await r.json();
+    const j = await fetchJSON(GAS_URL + '?action=config&t=' + Date.now(), {}, 15000);
     if (!j.ok) throw new Error(j.error);
     applyReset(j.config.resetAt || 0);
     cfg = j.config; store(K.cfg, cfg);
@@ -670,12 +677,19 @@ async function fetchConfig() {
 }
 
 // キッチン側の「調理完了」を取り込む
-async function fetchOrders() {
-  if (!GAS_URL) return;
+let rev = '', fetching = false;
+async function fetchOrders(full) {
+  if (!GAS_URL || fetching) return;                  // 応答が前後して古い一覧で上書きしないよう1本ずつ
+  fetching = true;
+  const t0 = Date.now();
   try {
-    const r = await fetch(GAS_URL + '?action=orders&t=' + Date.now());
-    const j = await r.json();
+    if (full) rev = '';
+    const j = await fetchJSON(GAS_URL + '?action=orders' + (rev ? '&since=' + encodeURIComponent(rev) : '') + '&t=' + t0, {}, 15000);
     if (!j.ok) throw new Error(j.error);
+    online = true;
+    if (j.unchanged) { rev = j.rev; return; }
+    if (j.rev && rev && Number(j.rev) < Number(rev)) return;
+    if (j.rev) rev = j.rev;
     let changed = false;
     if (j.stock && (!stock || JSON.stringify(stock.items) !== JSON.stringify(j.stock.items) || stock.warn !== j.stock.warn)) {
       stock = j.stock; changed = true;
@@ -704,18 +718,20 @@ async function fetchOrders() {
       if (st && st !== o.status && (o.status === 'waiting' || o.status === 'ready')) {
         if (st === 'ready' && o.status === 'waiting') becameReady++;
         o.status = st; changed = true;
-      } else if (!st && (o.status === 'waiting' || o.status === 'ready') && o.synced) {
-        o.status = 'done'; changed = true;           // 他の端末でお渡し／取消された
+      } else if (!st && (o.status === 'waiting' || o.status === 'ready') && o.synced && (o.syncedAt || 0) < t0) {
+        // 他の端末でお渡し／取消された（送信直後の注文は、送信前に取った一覧に載っていないだけなので除く）
+        o.status = 'done'; changed = true;
       }
     });
     if (!queue.length && j.nextTicket && j.nextTicket !== ticket) { ticket = j.nextTicket; store(K.ticket, ticket); changed = true; }
     if (changed) { store(K.orders, orders); render(); }
     if (becameReady) alertReady(becameReady);
-    online = true;
   } catch (e) {
     if (!queue.length) online = false;
+  } finally {
+    fetching = false;
+    renderStatus();
   }
-  renderStatus();
 }
 
 function applyReset(resetAt) {
@@ -811,15 +827,15 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('gesturechange', e => e.preventDefault());
 
 window.addEventListener('online', flush);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchConfig(); fetchOrders(); flush(); render(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchConfig(); fetchOrders(true); flush(); render(); } });
 
 orders = orders.filter(o => o.ts > Date.now() - 3 * 864e5); store(K.orders, orders);
 
 $('#soundBtn').setAttribute('aria-pressed', sound);
 render(); renderStatus();
-fetchConfig(); fetchOrders(); flush();
+fetchConfig(); fetchOrders(true); flush();
 setInterval(flush, 5000);
-setInterval(fetchOrders, 4000);
+setInterval(() => fetchOrders(false), 3000);        // 変化がなければサーバはキャッシュを見るだけなので軽い
 setInterval(fetchConfig, 60000);
 setInterval(render, 60000);
 </script>
